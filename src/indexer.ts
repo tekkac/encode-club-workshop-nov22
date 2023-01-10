@@ -12,11 +12,22 @@ import { EntityManager } from "typeorm";
 import { AppDataSource } from "./data-source";
 import { State, Token, Transfer } from "./entities";
 
-const BRIQ_DEPLOY_BLOCK = 180_000;
-const BRIQ_ADDRESS = hexToBuffer(
-  "0x0266b1276d23ffb53d99da3f01be7e29fa024dd33cd7f7b1eb7a46c67891c9d0",
+const SEASTARKTEST_MINT_BLOCK = 514_130;
+const SEASTARKTEST_ADDRESS = hexToBuffer(
+  "0x05a85cf2c715955a5d8971e01d1d98e04c31d919b6d59824efb32cc72ae90e63",
   32
 );
+
+const PROJECT_ADDRESSES = [
+  "0x030f5a9fbcf76e2171e49435f4d6524411231f257a1b28f517cf52f82279c06b",
+  "0x05a85cf2c715955a5d8971e01d1d98e04c31d919b6d59824efb32cc72ae90e63",
+  "0x022ddbb66fabf9ae859de95c499839ff46362128908d5e3d0842368aef8beb31",
+  "0x003d062b797ca97c2302bfdd0e9b687548771eda981d417faace4f6913ed8f2a",
+  "0x021f433090908c2e7a6672cdbc327f49ac11bcc922611620c2c4e0d915a83382",
+  "0x028c87a966e2f1166ba7fa8ae1cd89b47e13abcc676e5f7c508145751bbb7f15",
+  "0x05c30f6043246a0c4e45a0316806e053e63746fba3584e1f4fc1d4e7f5300acf",
+].map((addr) => hexToBuffer(addr, 32));
+
 const TRANSFER_KEY = hexToBuffer(getSelectorFromName("Transfer"), 32);
 
 export class AppIndexer {
@@ -33,7 +44,7 @@ export class AppIndexer {
     const state = await AppDataSource.manager.findOneBy(State, {
       indexerId: this.indexerId,
     });
-    let startingSequence = BRIQ_DEPLOY_BLOCK;
+    let startingSequence = SEASTARKTEST_MINT_BLOCK;
     if (state) {
       startingSequence = state.sequence + 1;
     }
@@ -64,12 +75,12 @@ export class AppIndexer {
   }
 
   async handleBlock(block: Block) {
-    console.log("Block");
-    console.log(`    hash: ${bufferToHex(new Buffer(block.blockHash.hash))}`);
-    console.log(`  number: ${block.blockNumber}`);
-    console.log(`    time: ${block.timestamp.toISOString()}`);
-
-    console.log("  transfers");
+    if (block.blockNumber % 1000 == 0) {
+      console.log("Block");
+      console.log(`    hash: ${bufferToHex(Buffer.from(block.blockHash.hash))}`);
+      console.log(`  number: ${block.blockNumber}`);
+      console.log(`    time: ${block.timestamp.toISOString()}`);
+    }
     await AppDataSource.manager.transaction(async (manager) => {
       for (let receipt of block.transactionReceipts) {
         const tx = block.transactions[receipt.transactionIndex];
@@ -91,7 +102,7 @@ export class AppIndexer {
     receipt: TransactionReceipt
   ) {
     for (let event of receipt.events) {
-      if (!BRIQ_ADDRESS.equals(event.fromAddress)) {
+      if (!PROJECT_ADDRESSES.some((addr) => addr.equals(event.fromAddress))) {
         continue;
       }
       if (!TRANSFER_KEY.equals(event.keys[0])) {
@@ -105,6 +116,7 @@ export class AppIndexer {
         Buffer.from(event.data[3])
       );
 
+      console.log("  transfers");
       console.log(
         `    ${bufferToHex(senderAddress)} -> ${bufferToHex(recipientAddress)}`
       );
